@@ -1,33 +1,32 @@
 ﻿#include <iostream>
 #include <vector>
 #include <string>
+#include <unordered_map>
 #include <algorithm>
 
 using namespace std;
 
-const int VALUE_LENGTH = 64; // Фиксированная длина строки значения
-
 // Вспомогательная функция для удаления символов '+' и '-'
-string normalizePhone(const string& phone) {
-    string normalized;
+// Нормализует телефонный номер, возвращает только цифры
+unsigned long long normalizePhone(const string& phone) {
+    unsigned long long normalized = 0;
     for (char c : phone) {
         if (isdigit(c)) {
-            normalized += c; // Добавляем только цифры
+            normalized = normalized * 10 + (c - '0'); // Добавляем только цифры
         }
     }
     return normalized;
 }
 
-// Функция сортировки подсчетом для одного разряда
-void countingSort(vector<pair<string, string>>& pairs, int pos) {
+// Функция сортировки подсчетом для одного разряда (поразрядная сортировка)
+void countingSort(vector<pair<unsigned long long, int>>& pairs, unsigned long long pos) {
     const int base = 10; // Возможные цифры от 0 до 9
     vector<int> count(base, 0);
-    vector<pair<string, string>> output(pairs.size());
+    vector<pair<unsigned long long, int>> output(pairs.size());
 
-    // Подсчёт количества вхождений каждого символа на позиции pos
+    // Подсчёт количества вхождений каждой цифры на позиции pos
     for (const auto& p : pairs) {
-        string normalized = normalizePhone(p.first);
-        int charIdx = (pos < normalized.size()) ? (normalized[normalized.size() - 1 - pos] - '0') : 0;
+        int charIdx = (p.first / pos) % 10; // Получаем цифру на позиции pos
         count[charIdx]++;
     }
 
@@ -38,8 +37,7 @@ void countingSort(vector<pair<string, string>>& pairs, int pos) {
 
     // Построение отсортированного массива
     for (int i = pairs.size() - 1; i >= 0; i--) {
-        string normalized = normalizePhone(pairs[i].first);
-        int charIdx = (pos < normalized.size()) ? (normalized[normalized.size() - 1 - pos] - '0') : 0;
+        int charIdx = (pairs[i].first / pos) % 10;
         output[--count[charIdx]] = pairs[i];
     }
 
@@ -48,30 +46,27 @@ void countingSort(vector<pair<string, string>>& pairs, int pos) {
 }
 
 // Поразрядная сортировка для пар ключ-значение
-void radixSort(vector<pair<string, string>>& pairs) {
-    // Определяем максимальную длину нормализованного телефонного номера
-    int maxLength = 0;
+void radixSort(vector<pair<unsigned long long, int>>& pairs) {
+    // Определяем максимальное значение нормализованного телефонного номера
+    unsigned long long maxVal = 0;
     for (const auto& p : pairs) {
-        maxLength = max(maxLength, (int)normalizePhone(p.first).size());
+        maxVal = max(maxVal, p.first);
     }
 
     // Выполняем поразрядную сортировку с конца номера
-    for (int pos = 0; pos < maxLength; ++pos) {
+    for (unsigned long long pos = 1; maxVal / pos > 0; pos *= 10) {
         countingSort(pairs, pos);
     }
 }
 
-// Функция для дополнения строки до 64 символов нулями
-string padValue(const string& value) {
-    string padded = value;
-    while (padded.size() < VALUE_LENGTH) {
-        padded += '\0'; // Дополнение нулевыми символами
-    }
-    return padded;
-}
-
 int main() {
+
+    ios::sync_with_stdio(false);
+    cin.tie(0);
+    cout.tie(0);
+
     vector<pair<string, string>> pairs;
+    unordered_map<unsigned long long, vector<int>> originalPhones; // Для маппинга нормализованных телефонов к оригинальным
     string line;
 
     // Чтение пар ключ-значение из входных данных
@@ -84,19 +79,25 @@ int main() {
         string key = line.substr(0, tabPos);
         string value = line.substr(tabPos + 1);
 
-        // Дополняем значение до 64 символов
-        value = padValue(value);
+        unsigned long long normalizedKey = normalizePhone(key);
 
-        pairs.emplace_back(key, value);
+        pairs.emplace_back(key, value); // Сохраняем оригинальные пары ключ-значение
+        originalPhones[normalizedKey].push_back(pairs.size() - 1); // Сохраняем индексы для восстановления оригинальных данных
+    }
+
+    // Подготовка данных для сортировки: нормализованные телефоны + индексы
+    vector<pair<unsigned long long, int>> pairs_sort(pairs.size());
+    for (int i = 0; i < pairs.size(); i++) {
+        pairs_sort[i] = { normalizePhone(pairs[i].first), i }; // Нормализованный телефон и индекс
     }
 
     // Применение поразрядной сортировки
-    radixSort(pairs);
+    radixSort(pairs_sort);
 
     // Вывод отсортированных пар
-    for (const auto& p : pairs) {
-        cout << p.first << '\t';
-        cout << p.second.substr(0, p.second.find('\0')) << endl; // Вывод без нулевых символов
+    for (const auto& p : pairs_sort) {
+        int originalIndex = p.second;
+        cout << pairs[originalIndex].first << '\t' << pairs[originalIndex].second << endl;
     }
 
     return 0;
