@@ -1,85 +1,100 @@
 ﻿#include <iostream>
 #include <vector>
 #include <string>
-#include <sstream>
+#include <unordered_map>
 #include <algorithm>
 
 using namespace std;
 
-// Функция для разделения строки на слова и приведения их к нижнему регистру
-vector<string> splitAndLowercase(const string& str) {
-    vector<string> words;
-    stringstream ss(str);
-    string word;
-    while (ss >> word) {
-        // Приводим слово к нижнему регистру
-        transform(word.begin(), word.end(), word.begin(), ::tolower);
-        words.push_back(word);
-    }
-    return words;
+string toLower(const string& str) {
+    string lowerStr = str;
+    transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(), ::tolower);
+    return lowerStr;
 }
 
-// Функция для построения таблицы плохого символа (для строк)
-vector<int> buildBadCharTable(const vector<string>& pattern) {
-    vector<int> badCharTable(256, -1); // Таблица для символов ASCII
-    for (int i = 0; i < pattern.size(); i++) {
-        for (char c : pattern[i]) {
-            badCharTable[(int)c] = i; // Для каждого символа в слове
+unordered_map<char, long> buildShiftTable(const string& pattern) {
+    unordered_map<char, long> shiftTable;
+    long m = pattern.size();
+    for (long i = 0; i < m - 1; ++i) {
+        shiftTable[pattern[i]] = m - i - 1;
+    }
+    for (char c = 'a'; c <= 'z'; ++c) {
+        if (shiftTable.find(c) == shiftTable.end()) {
+            shiftTable[c] = m;
         }
     }
-    return badCharTable;
+    return shiftTable;
 }
 
-// Основная функция поиска алгоритмом Апостолико-Джанкарло
-void apostolicoGiancarloSearch(const vector<vector<string>>& textLines, const vector<string>& pattern) {
-    int patternSize = pattern.size();
+void searchApostolicoGiancarlo(const string& pattern, const vector<string>& text, vector<pair<long, long>>& result) {
+    string lowerPattern = toLower(pattern);
+    long m = lowerPattern.size();
+    auto shiftTable = buildShiftTable(lowerPattern);
 
-    // Строим таблицу плохих символов
-    vector<int> badCharTable = buildBadCharTable(pattern);
+    long lineNum = 1;
+    long poslongext = 0;
+    string textBuffer;
+    vector<long> lineStarts;
 
-    // Проходим по каждой строке текста
-    for (int i = 0; i < textLines.size(); i++) {
-        const vector<string>& words = textLines[i];
-        int n = words.size();
-        int shift = 0;
 
-        while (shift <= (n - patternSize)) {
-            int j = patternSize - 1;
+    for (const auto& line : text) {
+        lineStarts.push_back(poslongext);
+        textBuffer += toLower(line) + " ";
+        poslongext += line.size() + 1;
+    }
 
-            // Сравниваем паттерн с текстом (справа налево)
-            while (j >= 0 && pattern[j] == words[shift + j]) {
-                j--;
+    long n = textBuffer.size();
+    long i = 0;
+
+    while (i <= n - m) {
+        long j = m - 1;
+        while (j >= 0 && lowerPattern[j] == textBuffer[i + j]) {
+            j--;
+        }
+
+        if (j < 0) {
+            auto lineIt = upper_bound(lineStarts.begin(), lineStarts.end(), i) - 1;
+            long lineStart = *lineIt;
+            lineNum = distance(lineStarts.begin(), lineIt) + 1;
+
+
+            long wordNum = 1;
+            for (long k = lineStart; k < i; ++k) {
+                if (textBuffer[k] == ' ') {
+                    wordNum++;
+                }
             }
+            result.emplace_back(lineNum, wordNum);
 
-            // Если весь паттерн совпал с последовательностью слов
-            if (j < 0) {
-                cout << i + 1 << ", " << shift + 1 << endl;  // Выводим 1-индексную позицию строки и слова
-                shift += 1; // Смещаем паттерн на 1 слово для поиска следующих вхождений (для перекрытий)
-            }
-            else {
-                // Используем таблицу плохого символа для сдвига
-                shift += max(1, j - badCharTable[(int)words[shift + j][0]]);
-            }
+
+            i += m;
+        }
+        else {
+            char badChar = textBuffer[i + j];
+            long shift = shiftTable[badChar];
+            i += shift;
         }
     }
 }
 
 int main() {
-    vector<string> patterns;  // Паттерн (первая строка)
-    vector<vector<string>> text;  // Текст (остальные строки)
+    string pattern;
+    getline(cin, pattern);
+
+    vector<string> text;
     string line;
 
-    // Считываем первую строку как паттерн и приводим к нижнему регистру
-    getline(cin, line);
-    patterns = splitAndLowercase(line);
-
-    // Считываем оставшиеся строки как текст и приводим к нижнему регистру
-    while (getline(cin, line)) {
-        text.push_back(splitAndLowercase(line));
+    while (getline(cin, line) && !line.empty()) {
+        text.push_back(line);
     }
 
-    // Поиск паттерна в тексте
-    apostolicoGiancarloSearch(text, patterns);
+    vector<pair<long, long>> result;
+    searchApostolicoGiancarlo(pattern, text, result);
+
+    // Вывод результатов
+    for (const auto& entry : result) {
+        cout << entry.first << ", " << entry.second << endl;
+    }
 
     return 0;
 }
